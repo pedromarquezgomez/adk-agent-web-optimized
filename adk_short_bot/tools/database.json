@@ -1,0 +1,72 @@
+{
+    "usuarios": [
+      {
+        "id": 1,
+        "nombre": "Pedro Martinez",
+        "email": "pedro@example.com",
+        "edad": 28,
+        "departamento": "IT",
+        "activo": true
+      },
+      {
+        "id": 2,
+        "nombre": "Ana Garcia",
+        "email": "ana@example.com",
+        "edad": 32,
+        "departamento": "Marketing",
+        "activo": true
+      },
+      {
+        "id": 3,
+        "nombre": "Carlos Lopez",
+        "email": "carlos@example.com",
+        "edad": 25,
+        "departamento": "IT",
+        "activo": false
+      }
+    ],
+    "productos": [
+      {
+        "id": 101,
+        "nombre": "Laptop HP",
+        "precio": 800.99,
+        "categoria": "Electrónicos",
+        "stock": 15,
+        "disponible": true
+      },
+      {
+        "id": 102,
+        "nombre": "Mouse Logitech",
+        "precio": 25.50,
+        "categoria": "Accesorios",
+        "stock": 50,
+        "disponible": true
+      },
+      {
+        "id": 103,
+        "nombre": "Monitor Samsung",
+        "precio": 299.99,
+        "categoria": "Electrónicos",
+        "stock": 0,
+        "disponible": false
+      }
+    ],
+    "proyectos": [
+      {
+        "id": 201,
+        "nombre": "Bot ADK",
+        "descripcion": "Bot para acortar mensajes usando Google ADK",
+        "estado": "activo",
+        "responsable": "Pedro Martinez",
+        "fecha_inicio": "2024-01-15"
+      },
+      {
+        "id": 202,
+        "nombre": "Web Analytics",
+        "descripcion": "Sistema de análisis web",
+        "estado": "completado",
+        "responsable": "Ana Garcia",
+        "fecha_inicio": "2023-11-01"
+      }
+    ]
+  }

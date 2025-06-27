@@ -1,11 +1,11 @@
 def count_characters(message: str) -> int:
     """
-    Count the number of characters in a message.
+    Cuenta el número de caracteres en un mensaje.
 
     Args:
-        message (str): The message to count characters for
+        message (str): El mensaje para contar caracteres
 
     Returns:
-        int: The number of characters in the message
+        int: El número de caracteres en el mensaje
     """
     return len(message)
