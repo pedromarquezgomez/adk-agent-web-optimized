@@ -18,12 +18,14 @@ python-dotenv = "^1.1.0"
 google-cloud-aiplatform = {extras = ["adk", "agent_engines"], version = "^1.42.1"}
 absl-py = "^2.1.0"
 cloudpickle = "^3.0.0"
+schedule = "^1.2.0"
 
 [tool.poetry.scripts]
 adk-short-bot = "adk_short_bot:app"
 deploy-local = "deployment.local:main"
 deploy-remote = "deployment.remote:main"
 cleanup = "deployment.cleanup:cleanup_deployment"
+keep-warm = "deployment.keep_warm:main"
 
 [build-system]
 requires = ["poetry-core"]

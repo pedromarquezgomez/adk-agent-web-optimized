@@ -298,24 +298,25 @@ app.post('/api/chat', verifyFirebaseToken, async (req, res) => {
         const agentStartTime = Date.now();
         
         try {
-            console.log(`\n⏱️  [${new Date().toISOString()}] INICIANDO LLAMADA AL AGENTE (Python SDK)...`);
-            response = await callAgentWithPython(message);
+            console.log(`\n⚡ [${new Date().toISOString()}] INICIANDO API DIRECTA AL REASONING ENGINE...`);
+            const queryResponse = await callAgentEngine(message, sessionId, userId);
             const agentEndTime = Date.now();
             const agentLatency = agentEndTime - agentStartTime;
-            console.log(`\n✅ [${new Date().toISOString()}] RESPUESTA DEL AGENTE RECIBIDA`);
-            console.log(`   Método: Python SDK`);
-            console.log(`   Latencia del agente: ${agentLatency}ms`);
-            console.log(`   Respuesta: "${response}"`);
+            response = queryResponse.response || queryResponse.output || queryResponse.content || 'Respuesta del agente recibida';
+            console.log(`\n✅ [${new Date().toISOString()}] RESPUESTA DEL REASONING ENGINE RECIBIDA`);
+            console.log(`   🎯 Método: API Directa (OPTIMIZADO)`);
+            console.log(`   ⚡ Latencia: ${agentLatency}ms`);
+            console.log(`   📥 Respuesta: "${response}"`);
             
             // Guardar en cache
             saveToCache(message, response);
             console.log(`   💾 Respuesta guardada en cache por ${CACHE_DURATION/60000} min`);
             
-        } catch (pythonError) {
-            const pythonEndTime = Date.now();
-            const pythonLatency = pythonEndTime - agentStartTime;
-            console.log(`\n❌ [${new Date().toISOString()}] Python SDK falló (${pythonLatency}ms): ${pythonError.message}`);
-            console.log(`\n⏱️  [${new Date().toISOString()}] INTENTANDO API STREAMING...`);
+        } catch (queryError) {
+            const queryEndTime = Date.now();
+            const queryLatency = queryEndTime - agentStartTime;
+            console.log(`\n⚠️  [${new Date().toISOString()}] API Directa falló (${queryLatency}ms): ${queryError.message}`);
+            console.log(`\n🌊 [${new Date().toISOString()}] FALLBACK: INTENTANDO API STREAMING...`);
             
             try {
                 const streamStartTime = Date.now();
@@ -323,30 +324,39 @@ app.post('/api/chat', verifyFirebaseToken, async (req, res) => {
                 const streamEndTime = Date.now();
                 const streamLatency = streamEndTime - streamStartTime;
                 console.log(`\n✅ [${new Date().toISOString()}] RESPUESTA DE STREAMING RECIBIDA`);
-                console.log(`   Método: API Streaming`);
-                console.log(`   Latencia: ${streamLatency}ms`);
-                console.log(`   Respuesta: "${response}"`);
+                console.log(`   🌊 Método: API Streaming (Fallback)`);
+                console.log(`   ⚡ Latencia: ${streamLatency}ms`);
+                console.log(`   📥 Respuesta: "${response}"`);
+                
+                // Guardar en cache
+                saveToCache(message, response);
+                console.log(`   💾 Respuesta guardada en cache por ${CACHE_DURATION/60000} min`);
+                
             } catch (streamError) {
                 const streamEndTime = Date.now();
                 const streamLatency = streamEndTime - agentStartTime;
-                console.log(`\n❌ [${new Date().toISOString()}] Streaming falló (${streamLatency}ms): ${streamError.message}`);
-                console.log(`\n⏱️  [${new Date().toISOString()}] INTENTANDO QUERY REGULAR...`);
+                console.log(`\n⚠️  [${new Date().toISOString()}] Streaming falló (${streamLatency}ms): ${streamError.message}`);
+                console.log(`\n🐍 [${new Date().toISOString()}] ÚLTIMO RECURSO: Python SDK...`);
                 
                 try {
-                    const queryStartTime = Date.now();
-                    const queryResponse = await callAgentEngine(message, sessionId, userId);
-                    const queryEndTime = Date.now();
-                    const queryLatency = queryEndTime - queryStartTime;
-                    response = queryResponse.response || queryResponse.output || 'Respuesta del agente recibida';
-                    console.log(`\n✅ [${new Date().toISOString()}] RESPUESTA DE QUERY RECIBIDA`);
-                    console.log(`   Método: API Query`);
-                    console.log(`   Latencia: ${queryLatency}ms`);
-                    console.log(`   Respuesta: "${response}"`);
-                } catch (queryError) {
+                    const pythonStartTime = Date.now();
+                    response = await callAgentWithPython(message);
+                    const pythonEndTime = Date.now();
+                    const pythonLatency = pythonEndTime - pythonStartTime;
+                    console.log(`\n✅ [${new Date().toISOString()}] RESPUESTA DE PYTHON SDK RECIBIDA`);
+                    console.log(`   🐍 Método: Python SDK (Último recurso)`);
+                    console.log(`   ⏱️  Latencia: ${pythonLatency}ms`);
+                    console.log(`   📥 Respuesta: "${response}"`);
+                    
+                    // Guardar en cache
+                    saveToCache(message, response);
+                    console.log(`   💾 Respuesta guardada en cache por ${CACHE_DURATION/60000} min`);
+                    
+                } catch (pythonError) {
                     const errorEndTime = Date.now();
                     const errorLatency = errorEndTime - agentStartTime;
                     console.error(`\n💥 [${new Date().toISOString()}] TODOS LOS MÉTODOS FALLARON (${errorLatency}ms)`);
-                    console.error(`   Error final: ${queryError.message}`);
+                    console.error(`   🔥 Error final: ${pythonError.message}`);
                     response = 'Lo siento, hubo un problema técnico. El agente no está disponible en este momento.';
                 }
             }

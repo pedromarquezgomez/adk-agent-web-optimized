@@ -5,7 +5,7 @@ from adk_short_bot.tools import count_characters, query_json_database, search_da
 
 root_agent = Agent(
     name="adk_short_bot",
-    model="gemini-2.0-flash",
+    model="gemini-1.0-flash",  # Optimizado para latencia más rápida
     description="Un bot que acorta mensajes manteniendo su significado principal y puede consultar información de base de datos",
     instruction=ROOT_AGENT_INSTRUCTION,
     tools=[count_characters, query_json_database, search_database],
