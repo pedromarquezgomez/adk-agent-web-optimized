@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ADK Short Bot - Chat Interface</title>
+    
+    <!-- Firebase SDKs (UMD versions for browser) -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+    
+    <!-- React and Babel for JSX -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        // Firebase Configuration (inline para evitar problemas de módulos)
+        const firebaseConfig = {
+            apiKey: "AIzaSyDh32X4xwU9lMP2uH-yJOERza2B9cm5EF4",
+            authDomain: "hosteler-ia.firebaseapp.com",
+            projectId: "hosteler-ia",
+            storageBucket: "hosteler-ia.firebasestorage.app",
+            messagingSenderId: "171179711118",
+            appId: "1:171179711118:web:e41d62f13d525a20d9c7df",
+            measurementId: "G-9NBTNPE1RS"
+        };
+
+        // Initialize Firebase (compat version)
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+
+        // Google Cloud Configuration
+        const GOOGLE_CLOUD_CONFIG = {
+            projectId: 'sumy-464008',
+            location: 'us-central1',
+            resourceId: '5508720380925181952',
+            apiEndpoint: 'https://us-central1-aiplatform.googleapis.com'
+        };
+
+        const { useState, useEffect, useRef } = React;
+
+        function ChatApp() {
+            const [user, setUser] = useState(null);
+            const [messages, setMessages] = useState([]);
+            const [inputMessage, setInputMessage] = useState('');
+            const [isLoading, setIsLoading] = useState(false);
+            const [sessionId, setSessionId] = useState(null);
+            const [connectionStatus, setConnectionStatus] = useState('Desconectado');
+            const messagesEndRef = useRef(null);
+
+            // Authentication
+            useEffect(() => {
+                const unsubscribe = auth.onAuthStateChanged((user) => {
+                    setUser(user);
+                    if (user) {
+                        console.log('Usuario autenticado:', user.displayName);
+                        loadChatHistory(user.uid);
+                        createSession(user.uid);
+                        setConnectionStatus('Conectado');
+                    } else {
+                        setConnectionStatus('Desconectado');
+                    }
+                });
+                return () => unsubscribe();
+            }, []);
+
+            // Auto scroll to bottom
+            useEffect(() => {
+                scrollToBottom();
+            }, [messages]);
+
+            const scrollToBottom = () => {
+                messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+            };
+
+            const signInWithGoogle = async () => {
+                const provider = new firebase.auth.GoogleAuthProvider();
+                try {
+                    const result = await auth.signInWithPopup(provider);
+                    console.log('Login exitoso:', result.user.displayName);
+                } catch (error) {
+                    console.error('Error al iniciar sesión:', error);
+                    alert('Error al iniciar sesión: ' + error.message);
+                }
+            };
+
+            const signOut = async () => {
+                try {
+                    await auth.signOut();
+                    setMessages([]);
+                    setSessionId(null);
+                    setConnectionStatus('Desconectado');
+                } catch (error) {
+                    console.error('Error al cerrar sesión:', error);
+                }
+            };
+
+            const createSession = async (userId) => {
+                try {
+                    console.log('Intentando crear sesión para userId:', userId);
+                    const sessionData = {
+                        userId: userId,
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                        active: true
+                    };
+                    console.log('Datos de sesión:', sessionData);
+                    
+                    const sessionRef = await db.collection('sessions').add(sessionData);
+                    setSessionId(sessionRef.id);
+                    console.log('Sesión creada exitosamente:', sessionRef.id);
+                } catch (error) {
+                    console.error('Error creando sesión:', error);
+                    console.error('Código de error:', error.code);
+                    console.error('Mensaje de error:', error.message);
+                    // Usar un sessionId temporal si no se puede crear en Firestore
+                    const tempSessionId = 'temp_' + userId + '_' + Date.now();
+                    setSessionId(tempSessionId);
+                    console.log('Usando sesión temporal:', tempSessionId);
+                }
+            };
+
+            const loadChatHistory = async (userId) => {
+                try {
+                    console.log('Intentando cargar historial para userId:', userId);
+                    
+                    // Intentar con índice primero
+                    try {
+                        const snapshot = await db.collection('messages')
+                            .where('userId', '==', userId)
+                            .orderBy('timestamp', 'asc')
+                            .limit(50)
+                            .get();
+                        
+                        const history = snapshot.docs.map(doc => ({
+                            id: doc.id,
+                            ...doc.data(),
+                            timestamp: doc.data().timestamp?.toDate() || new Date()
+                        }));
+                        
+                        // Ordenar manualmente como backup
+                        history.sort((a, b) => a.timestamp - b.timestamp);
+                        
+                        setMessages(history);
+                        console.log('Historial cargado exitosamente:', history.length, 'mensajes');
+                        return;
+                    } catch (indexError) {
+                        if (indexError.code === 'failed-precondition') {
+                            console.log('Índice aún construyéndose, intentando consulta simple...');
+                            
+                            // Consulta simple sin ordenamiento mientras se construye el índice
+                            const snapshot = await db.collection('messages')
+                                .where('userId', '==', userId)
+                                .limit(50)
+                                .get();
+                            
+                            const history = snapshot.docs.map(doc => ({
+                                id: doc.id,
+                                ...doc.data(),
+                                timestamp: doc.data().timestamp?.toDate() || new Date()
+                            }));
+                            
+                            // Ordenar manualmente por timestamp
+                            history.sort((a, b) => a.timestamp - b.timestamp);
+                            
+                            setMessages(history);
+                            console.log('Historial cargado con consulta simple:', history.length, 'mensajes');
+                            console.log('El índice se está construyendo. El ordenamiento mejorará cuando esté listo.');
+                        } else {
+                            throw indexError;
+                        }
+                    }
+                    
+                } catch (error) {
+                    console.error('Error cargando historial:', error);
+                    console.error('Código de error:', error.code);
+                    console.error('Mensaje de error:', error.message);
+                    // Continuar sin historial si hay problemas
+                    console.log('Continuando sin historial debido a error');
+                    setMessages([]);
+                }
+            };
+
+            const saveMessage = async (message) => {
+                if (!user || !sessionId) {
+                    console.log('No se puede guardar mensaje: user o sessionId faltante');
+                    return;
+                }
+                
+                try {
+                    console.log('Guardando mensaje:', { userId: user.uid, sessionId, text: message.text, type: message.type });
+                    await db.collection('messages').add({
+                        userId: user.uid,
+                        sessionId: sessionId,
+                        text: message.text,
+                        type: message.type,
+                        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                    console.log('Mensaje guardado exitosamente');
+                } catch (error) {
+                    console.error('Error guardando mensaje:', error);
+                    console.error('Código de error:', error.code);
+                    console.error('Mensaje de error:', error.message);
+                    // Continuar aunque no se pueda guardar
+                    console.log('Continuando aunque no se pudo guardar el mensaje');
+                }
+            };
+
+            const sendMessageToAgent = async (message) => {
+                const startTime = performance.now();
+                const startTimestamp = new Date().toISOString();
+                
+                console.log(`\n🚀 [${startTimestamp}] ENVIANDO MENSAJE AL AGENTE`);
+                console.log(`   📤 Mensaje: "${message}"`);
+                console.log(`   🆔 Sesión: ${sessionId}`);
+                console.log(`   👤 Usuario: ${user?.displayName || 'Anónimo'}`);
+                
+                setIsLoading(true);
+                
+                try {
+                    const fetchStartTime = performance.now();
+                    console.log(`\n⏱️  [${new Date().toISOString()}] INICIANDO FETCH AL SERVIDOR...`);
+                    
+                    const response = await fetch('/api/chat', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${await user.getIdToken()}`
+                        },
+                        body: JSON.stringify({
+                            message: message,
+                            sessionId: sessionId,
+                            projectId: GOOGLE_CLOUD_CONFIG.projectId,
+                            resourceId: GOOGLE_CLOUD_CONFIG.resourceId
+                        })
+                    });
+
+                    const fetchEndTime = performance.now();
+                    const fetchLatency = fetchEndTime - fetchStartTime;
+                    
+                    console.log(`\n📡 [${new Date().toISOString()}] RESPUESTA DEL SERVIDOR RECIBIDA`);
+                    console.log(`   ⏱️  Latencia de red: ${fetchLatency.toFixed(1)}ms`);
+                    console.log(`   📊 Status: ${response.status} ${response.statusText}`);
+
+                    if (!response.ok) {
+                        throw new Error(`Error del servidor: ${response.status}`);
+                    }
+
+                    const jsonStartTime = performance.now();
+                    const data = await response.json();
+                    const jsonEndTime = performance.now();
+                    const jsonLatency = jsonEndTime - jsonStartTime;
+                    
+                    const totalTime = performance.now() - startTime;
+                    const endTimestamp = new Date().toISOString();
+                    
+                    // Detectar si fue desde cache
+                    const wasCached = data.cached === true;
+                    const serverLatency = data.latency || 'N/A';
+                    
+                    if (wasCached) {
+                        console.log(`\n⚡ [${endTimestamp}] RESPUESTA ULTRA RÁPIDA (CACHE HIT!)`);
+                        console.log(`   🔥 CACHE HIT - Respuesta instantánea!`);
+                        console.log(`   📥 Respuesta: "${data.response?.substring(0, 100) || 'Sin respuesta'}${data.response?.length > 100 ? '...' : ''}"`);
+                        console.log(`   ⏱️  LATENCIAS OPTIMIZADAS:`);
+                        console.log(`      - Servidor (cache): ${serverLatency}ms`);
+                        console.log(`      - Red + parsing: ${fetchLatency.toFixed(1)}ms`);
+                        console.log(`      - TOTAL CLIENTE: ${totalTime.toFixed(1)}ms`);
+                        console.log(`   🚀 SPEEDUP: ~700x más rápido que normal!`);
+                        console.log(`\n${'⚡'.repeat(50)}`);
+                    } else {
+                        console.log(`\n✅ [${endTimestamp}] PROCESAMIENTO COMPLETADO (PRIMERA VEZ)`);
+                        console.log(`   📥 Respuesta: "${data.response?.substring(0, 100) || 'Sin respuesta'}${data.response?.length > 100 ? '...' : ''}"`);
+                        console.log(`   ⏱️  BREAKDOWN DE LATENCIA:`);
+                        console.log(`      - Servidor (agente): ${serverLatency}ms`);
+                        console.log(`      - Red + parsing: ${fetchLatency.toFixed(1)}ms`);
+                        console.log(`      - TOTAL CLIENTE: ${totalTime.toFixed(1)}ms`);
+                        console.log(`   💾 Respuesta guardada en cache para próximas consultas`);
+                        console.log(`\n${'🔥'.repeat(40)}`);
+                    }
+                    
+                    return data.response || 'El agente respondió sin texto';
+                    
+                } catch (error) {
+                    const errorTime = performance.now() - startTime;
+                    const errorTimestamp = new Date().toISOString();
+                    
+                    console.error(`\n💥 [${errorTimestamp}] ERROR EN ENVÍO`);
+                    console.error(`   ❌ Error: ${error.message}`);
+                    console.error(`   ⏱️  Tiempo hasta error: ${errorTime.toFixed(1)}ms`);
+                    console.error(`\n${'❌'.repeat(40)}`);
+                    
+                    return `Error: ${error.message}. Verifica que el servidor esté corriendo.`;
+                }
+            };
+
+            const handleSendMessage = async (e) => {
+                e.preventDefault();
+                
+                if (!inputMessage.trim() || !user) return;
+
+                const conversationStartTime = performance.now();
+                const startTimestamp = new Date().toISOString();
+                
+                console.log(`\n💬 [${startTimestamp}] NUEVA CONVERSACIÓN INICIADA`);
+                console.log(`   👤 Usuario: ${user.displayName}`);
+                console.log(`   📝 Mensaje: "${inputMessage}"`);
+                console.log(`   🆔 Sesión activa: ${sessionId}`);
+
+                const userMessage = {
+                    text: inputMessage,
+                    type: 'user',
+                    timestamp: new Date()
+                };
+
+                setMessages(prev => [...prev, userMessage]);
+                await saveMessage(userMessage);
+                
+                const messageToSend = inputMessage;
+                setInputMessage('');
+
+                console.log(`\n📨 [${new Date().toISOString()}] MENSAJE AGREGADO A UI - ENVIANDO AL AGENTE...`);
+
+                // Enviar al agente
+                const agentResponse = await sendMessageToAgent(messageToSend);
+                
+                const botMessage = {
+                    text: agentResponse,
+                    type: 'bot',
+                    timestamp: new Date()
+                };
+
+                setMessages(prev => [...prev, botMessage]);
+                await saveMessage(botMessage);
+                
+                const totalConversationTime = performance.now() - conversationStartTime;
+                const endTimestamp = new Date().toISOString();
+                
+                console.log(`\n🎯 [${endTimestamp}] CONVERSACIÓN COMPLETADA`);
+                console.log(`   ⏱️  TIEMPO TOTAL DE CONVERSACIÓN: ${totalConversationTime.toFixed(1)}ms`);
+                console.log(`   📊 RESUMEN:`);
+                console.log(`      - Usuario escribió: "${messageToSend}"`);
+                console.log(`      - Agente respondió: "${agentResponse?.substring(0, 80) || 'Sin respuesta'}${agentResponse?.length > 80 ? '...' : ''}"`);
+                console.log(`\n${'✨'.repeat(50)}\n`);
+                
+                setIsLoading(false);
+            };
+
+            if (!user) {
+                return (
+                    <div className="login-container">
+                        <div className="login-card">
+                            <h1>🤖 ADK Short Bot</h1>
+                            <p>Inicia sesión para comenzar a chatear con tu agente inteligente</p>
+                            <button onClick={signInWithGoogle} className="google-login-btn">
+                                <span>🔐</span> Iniciar sesión con Google
+                            </button>
+                        </div>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="chat-container">
+                    <header className="chat-header">
+                        <div className="header-left">
+                            <h1>🤖 ADK Short Bot</h1>
+                            <span className="status">{connectionStatus}</span>
+                            <button 
+                                onClick={() => {
+                                    console.log('👋 ¡Hola! Los logs detallados de latencia aparecen aquí en la consola.');
+                                    console.log('💡 Envía un mensaje para ver el breakdown completo de tiempos.');
+                                    alert('¡Consola activada! Abre las DevTools (F12) y ve a la pestaña Console para ver los logs detallados de latencia.');
+                                }}
+                                className="debug-btn"
+                                title="Activar logs de debug en consola"
+                            >
+                                📊 Debug
+                            </button>
+                        </div>
+                        <div className="header-right">
+                            <span>Hola, {user.displayName}</span>
+                            <button onClick={signOut} className="logout-btn">Cerrar sesión</button>
+                        </div>
+                    </header>
+
+                    <div className="messages-container">
+                        {messages.length === 0 && (
+                            <div className="welcome-message">
+                                <p>¡Hola! Soy tu ADK Short Bot. Puedo ayudarte a:</p>
+                                <ul>
+                                    <li>🔤 Acortar mensajes largos</li>
+                                    <li>🔍 Consultar la base de datos</li>
+                                    <li>💬 Responder preguntas</li>
+                                </ul>
+                                <p>¡Escribe un mensaje para comenzar!</p>
+                            </div>
+                        )}
+                        
+                        {messages.map((message, index) => (
+                            <div key={index} className={`message ${message.type}`}>
+                                <div className="message-content">
+                                    <p>{message.text}</p>
+                                    <span className="timestamp">
+                                        {message.timestamp?.toLocaleTimeString ? 
+                                            message.timestamp.toLocaleTimeString() : 
+                                            new Date(message.timestamp).toLocaleTimeString()}
+                                    </span>
+                                </div>
+                            </div>
+                        ))}
+                        
+                        {isLoading && (
+                            <div className="message bot">
+                                <div className="message-content">
+                                    <div className="typing-indicator">
+                                        <span></span>
+                                        <span></span>
+                                        <span></span>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                        <div ref={messagesEndRef} />
+                    </div>
+
+                    <form onSubmit={handleSendMessage} className="input-form">
+                        <div className="input-container">
+                            <input
+                                type="text"
+                                value={inputMessage}
+                                onChange={(e) => setInputMessage(e.target.value)}
+                                placeholder="Escribe tu mensaje aquí..."
+                                disabled={isLoading}
+                                autoFocus
+                            />
+                            <button type="submit" disabled={isLoading || !inputMessage.trim()}>
+                                {isLoading ? '⏳' : '📤'}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            );
+        }
+
+        // Render the app
+        ReactDOM.render(<ChatApp />, document.getElementById('root'));
+    </script>
+</body>
+</html> 

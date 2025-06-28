@@ -153,3 +153,15 @@ To add new features or modify existing ones:
 ## License
 
 [Your chosen license]
+
+```bash
+curl -X POST "https://us-central1-aiplatform.googleapis.com/v1/projects/sumy-464008/locations/us-central1/reasoningEngines/5508720380925181952:streamQuery" \
+  -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "input": {
+      "message": "Busca a Pedro Martinez",
+      "user_id": "test_user"
+    }
+  }
+```
